@@ -1,0 +1,49 @@
+pipeline {
+    agent any
+    environment {
+        AWS_REGION   = 'us-east-1'
+        CLUSTER_NAME = 'security-lab'
+        AWS_CREDS_ID = 'aws-093831816337'
+        NAMESPACE    = 'juice-shop'
+    }
+    options {
+        timeout(time: 10, unit: 'MINUTES')
+        timestamps()
+    }
+    stages {
+        stage('Connect') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDS_ID]]) {
+                    sh 'aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME" && kubectl get nodes'
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDS_ID]]) {
+                    sh 'kubectl apply -f k8s/namespace.yaml -f k8s/deployment.yaml -f k8s/service.yaml'
+                }
+            }
+        }
+        stage('Wait') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDS_ID]]) {
+                    sh 'kubectl -n $NAMESPACE rollout status deployment/juice-shop --timeout=300s && kubectl -n $NAMESPACE get pods,svc -o wide'
+                }
+            }
+        }
+        stage('URL') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDS_ID]]) {
+                    sh '''
+                        PORT=$(kubectl -n $NAMESPACE get svc juice-shop -o jsonpath='{.spec.ports[0].nodePort}')
+                        echo "=== Juice Shop Access URLs ==="
+                        for IP in $(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'); do
+                            echo "http://$IP:$PORT"
+                        done
+                    '''
+                }
+            }
+        }
+    }
+}
