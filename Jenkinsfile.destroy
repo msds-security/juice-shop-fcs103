@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+    environment {
+        AWS_REGION   = 'us-east-1'
+        CLUSTER_NAME = 'security-lab'
+        AWS_CREDS_ID = 'aws-093831816337'
+        NAMESPACE    = 'juice-shop'
+    }
+    options {
+        timeout(time: 5, unit: 'MINUTES')
+        timestamps()
+    }
+    stages {
+        stage('Confirm') {
+            steps {
+                input message: "Delete Juice Shop from cluster security-lab?", ok: 'Delete'
+            }
+        }
+        stage('Connect') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDS_ID]]) {
+                    sh 'aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME" && kubectl get ns $NAMESPACE'
+                }
+            }
+        }
+        stage('Delete') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDS_ID]]) {
+                    sh '''
+                        kubectl delete -f k8s/service.yaml --ignore-not-found
+                        kubectl delete -f k8s/deployment.yaml --ignore-not-found
+                        kubectl delete -f k8s/namespace.yaml --ignore-not-found
+                        echo "Juice Shop removed from cluster"
+                    '''
+                }
+            }
+        }
+    }
+}
