@@ -29,7 +29,7 @@ pipeline {
                     sh '''
                         kubectl delete -f k8s/service.yaml --ignore-not-found
                         kubectl delete -f k8s/deployment.yaml --ignore-not-found
-                        kubectl delete -f k8s/namespace.yaml --ignore-not-found
+                        kubectl delete -f k8s/namespace.yaml --ignore-not-found --wait=false
                         echo "Juice Shop removed from cluster"
                     '''
                 }
